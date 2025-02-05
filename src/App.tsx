@@ -1,7 +1,11 @@
-import { GoBoard } from "./GoBoard";
+import { GoBoard } from "./GoBoard"
 
 function App() {
-  return <div className="p-10"><GoBoard size={19} /></div>
+  return (
+    <div className="p-10">
+      <GoBoard size={19} />
+    </div>
+  )
 }
 
-export default App;
+export default App
