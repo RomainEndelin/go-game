@@ -9,6 +9,13 @@ const downDirection: DirectionFn = (position) => new Position({ i: position.i + 
 const leftDirection: DirectionFn = (position) => new Position({ i: position.i, j: position.j - 1 })
 const rightDirection: DirectionFn = (position) => new Position({ i: position.i, j: position.j + 1 })
 
+const ALL_DIRECTIONS = [upDirection, downDirection, leftDirection, rightDirection]
+
+interface StoneCluster {
+  stones: Position[]
+  liberties: Position[]
+}
+
 @model("go/Player")
 export class Player extends Model({
   color: prop<Color>(),
@@ -24,73 +31,53 @@ export class Player extends Model({
   }
 
   @modelAction
+  private rawRemoveStones(positionsToRemove: Position[]) {
+    this.stones = this.stones.filter((stone) => !positionsToRemove.some((toRemove) => stone.equal(toRemove)))
+  }
+
   removeDeadStonesAroundPosition(position: Position) {
-    this.removeDeadStonesInDirection(position, upDirection)
-    this.removeDeadStonesInDirection(position, downDirection)
-    this.removeDeadStonesInDirection(position, leftDirection)
-    this.removeDeadStonesInDirection(position, rightDirection)
+    this.rawRemoveStones([...ALL_DIRECTIONS.flatMap((direction) => this.detectDeadStones(direction(position)))])
   }
 
-  @modelAction
-  removeDeadStonesInDirection(position: Position, direction: DirectionFn) {
-    const targetPosition = direction(position)
-
-    if (!position.isInBoard(this.board.size)) {
-      return
-    }
-    if (!this.hasStone(targetPosition)) {
-      return
+  detectDeadStones(position: Position) {
+    if (!position.isInBoard(this.board.size) || !this.hasStone(position)) {
+      return []
     }
 
-    const { liberties, stones: group } = this.computeGroupAndLiberties(targetPosition)
-    if (liberties.length === 0) {
-      this.stones = this.stones.filter((stone) => !group.some((toRemove) => stone.equal(toRemove)))
+    const { liberties, stones } = this.findStonesAndLibertiesFromPosition(position)
+    if (liberties.length > 0) {
+      return []
     }
+    return stones
   }
 
-  computeGroupAndLiberties(
+  findStonesAndLibertiesFromPosition(
     position: Position,
-    liberties: Position[] = [],
-    acc: Position[] = [],
-  ): { liberties: Position[]; stones: Position[] } {
-    acc = [...acc, position]
+    acc: StoneCluster = { liberties: [], stones: [position] },
+  ): StoneCluster {
+    return ALL_DIRECTIONS.reduce((acc, direction) => {
+      const targetPosition = direction(position)
 
-    const directions = [upDirection, downDirection, leftDirection, rightDirection]
-    return directions.reduce(
-      ({ liberties, stones }, direction) =>
-        this.searchGroupAndLibertiesInDirection(position, liberties, stones, direction),
-      { liberties, stones: acc },
-    )
-  }
-
-  private searchGroupAndLibertiesInDirection(
-    position: Position,
-    liberties: Position[],
-    acc: Position[],
-    direction: DirectionFn,
-  ) {
-    const targetPosition = direction(position)
-    if (!targetPosition.isInBoard(this.board.size)) {
-      return { liberties, stones: acc }
-    }
-    if (
-      acc.some((accPosition) => targetPosition.equal(accPosition)) ||
-      liberties.some((libertyPosition) => targetPosition.equal(libertyPosition))
-    ) {
-      return { liberties, stones: acc } // we already found a stone or a liberty in this position
-    }
-
-    if (this.hasStone(targetPosition)) {
-      const { liberties: newLiberties, stones } = this.computeGroupAndLiberties(targetPosition, liberties, acc)
-      return {
-        liberties: newLiberties,
-        stones: [...stones, targetPosition],
+      if (
+        acc.stones.some((stonePosition) => targetPosition.equal(stonePosition)) || // we already registered a stone in that position
+        acc.liberties.some((libertyPosition) => targetPosition.equal(libertyPosition)) || // we already registered a liberty in that position
+        !targetPosition.isInBoard(this.board.size) || // Out of board
+        this.otherPlayer.hasStone(targetPosition) // Opponent stone
+      ) {
+        return acc // we already registered a stone or a liberty in this position
       }
-    } else if (this.otherPlayer.hasStone(targetPosition)) {
-      return { liberties, stones: acc }
-    } else {
-      return { liberties: [...liberties, targetPosition], stones: acc }
-    }
+
+      if (this.hasStone(targetPosition)) {
+        // register a stone in group & lookup for nearby stones & liberties + register the current stone
+        return this.findStonesAndLibertiesFromPosition(targetPosition, {
+          liberties: acc.liberties,
+          stones: [...acc.stones, targetPosition],
+        })
+      }
+
+      // else, no stone from either player - register a liberty
+      return { liberties: [...acc.liberties, targetPosition], stones: acc.stones }
+    }, acc)
   }
 
   @computed

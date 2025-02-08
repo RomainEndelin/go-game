@@ -30,7 +30,7 @@ export class GoGame extends Model({
   // Stones
   @modelAction
   addStone(targetPosition: Position) {
-    if (this.findStone(targetPosition) !== undefined) {
+    if (!targetPosition.isInBoard(this.size) || this.findStone(targetPosition) !== undefined) {
       return false
     }
 
@@ -38,7 +38,7 @@ export class GoGame extends Model({
     afterActionDraft.data.currentPlayer.rawAddStone(targetPosition)
     afterActionDraft.data.opponentPlayer.removeDeadStonesAroundPosition(targetPosition)
 
-    if (afterActionDraft.data.currentPlayer.computeGroupAndLiberties(targetPosition).liberties.length === 0) {
+    if (afterActionDraft.data.currentPlayer.findStonesAndLibertiesFromPosition(targetPosition).liberties.length === 0) {
       return false // no suicide move
       // If we are about to take a stone, that's not a suicide
     }
