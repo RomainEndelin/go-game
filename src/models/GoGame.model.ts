@@ -1,18 +1,17 @@
 import { computed } from "mobx"
 import { draft, Model, model, modelAction, prop } from "mobx-keystone"
+import { Position } from "./Position.model"
 
 type Color = "black" | "white"
-type Stone = [number, number, Color]
+type Stone = [Position, Color]
 
 const negateColor = (color: Color): Color => (color === "black" ? "white" : "black")
 
-type DirectionFn = (i: number, j: number) => [number, number]
-const upDirection: DirectionFn = (i, j) => [i - 1, j]
-const downDirection: DirectionFn = (i, j) => [i + 1, j]
-const leftDirection: DirectionFn = (i, j) => [i, j - 1]
-const rightDirection: DirectionFn = (i, j) => [i, j + 1]
-
-const isInBoard = (i: number, j: number, size: number) => i >= 1 && i <= size && j >= 1 && j <= size
+type DirectionFn = (args: Position) => Position
+const upDirection: DirectionFn = (position) => new Position({ i: position.i - 1, j: position.j })
+const downDirection: DirectionFn = (position) => new Position({ i: position.i + 1, j: position.j })
+const leftDirection: DirectionFn = (position) => new Position({ i: position.i, j: position.j - 1 })
+const rightDirection: DirectionFn = (position) => new Position({ i: position.i, j: position.j + 1 })
 
 @model("go/GoGame")
 export class GoGame extends Model({
@@ -37,16 +36,16 @@ export class GoGame extends Model({
 
   // Stones
   @modelAction
-  addStone(position: [number, number]) {
+  addStone(targetPosition: Position) {
     const afterActionDraft = draft(this)
 
-    afterActionDraft.data.rawAddStone(position, this.currentColor)
-    afterActionDraft.data.removeDeadStonesAroundPosition(...position)
+    afterActionDraft.data.rawAddStone(targetPosition, this.currentColor)
+    afterActionDraft.data.removeDeadStonesAroundPosition(targetPosition)
 
-    if (this.findStone(...position) !== undefined) {
+    if (this.findStone(targetPosition) !== undefined) {
       return false
     }
-    if (afterActionDraft.data.computeGroupAndLiberties(...position, this.currentColor).liberties.length === 0) {
+    if (afterActionDraft.data.computeGroupAndLiberties(targetPosition, this.currentColor).liberties.length === 0) {
       return false // no suicide move
       // If we are about to take a stone, that's not a suicide
     }
@@ -56,92 +55,88 @@ export class GoGame extends Model({
   }
 
   @modelAction
-  private rawAddStone(position: [number, number], color: Color) {
-    this.stones = [...this.stones, [...position, color]]
+  private rawAddStone(position: Position, color: Color) {
+    this.stones = [...this.stones, [position, color]]
   }
 
-  findStone(i: number, j: number): Stone | undefined {
-    return this.stones.find(([row, col]) => row === i && col === j)
-  }
-
-  @modelAction
-  removeDeadStonesAroundPosition(i: number, j: number) {
-    this.removeDeadStonesInDirection(i, j, upDirection)
-    this.removeDeadStonesInDirection(i, j, downDirection)
-    this.removeDeadStonesInDirection(i, j, leftDirection)
-    this.removeDeadStonesInDirection(i, j, rightDirection)
+  findStone(position: Position): Stone | undefined {
+    return this.stones.find(([otherPosition]) => position.equal(otherPosition))
   }
 
   @modelAction
-  private removeDeadStonesInDirection(i: number, j: number, direction: DirectionFn) {
-    const targetPosition = direction(i, j)
+  removeDeadStonesAroundPosition(position: Position) {
+    this.removeDeadStonesInDirection(position, upDirection)
+    this.removeDeadStonesInDirection(position, downDirection)
+    this.removeDeadStonesInDirection(position, leftDirection)
+    this.removeDeadStonesInDirection(position, rightDirection)
+  }
 
-    if (!isInBoard(...targetPosition, this.size)) {
+  @modelAction
+  private removeDeadStonesInDirection(position: Position, direction: DirectionFn) {
+    const targetPosition = direction(position)
+
+    if (!position.isInBoard(this.size)) {
       return
     }
-    const targetStone = this.findStone(...targetPosition)
-    if (targetStone === undefined || targetStone[2] !== this.opponentColor) {
+    const targetStone = this.findStone(targetPosition)
+    if (targetStone === undefined || targetStone[1] !== this.opponentColor) {
       return
     }
 
-    const { liberties, stones: group } = this.computeGroupAndLiberties(...targetPosition, this.opponentColor)
+    const { liberties, stones: group } = this.computeGroupAndLiberties(targetPosition, this.opponentColor)
     if (liberties.length === 0) {
-      this.stones = this.stones.filter(
-        (stone) => !group.some((toRemove) => stone[0] === toRemove[0] && stone[1] === toRemove[1]),
-      )
+      this.stones = this.stones.filter((stone) => !group.some((toRemove) => stone[0].equal(toRemove)))
     }
   }
 
   private computeGroupAndLiberties(
-    i: number,
-    j: number,
+    position: Position,
     targetColor: Color,
-    liberties: [number, number][] = [],
-    acc: [number, number][] = [],
-  ): { liberties: [number, number][]; stones: [number, number][] } {
-    acc = [...acc, [i, j]]
+    liberties: Position[] = [],
+    acc: Position[] = [],
+  ): { liberties: Position[]; stones: Position[] } {
+    acc = [...acc, position]
 
     const directions = [upDirection, downDirection, leftDirection, rightDirection]
     return directions.reduce(
       ({ liberties, stones }, direction) =>
-        this.searchGroupAndLibertiesInDirection(i, j, targetColor, liberties, stones, direction),
+        this.searchGroupAndLibertiesInDirection(position, targetColor, liberties, stones, direction),
       { liberties, stones: acc },
     )
   }
 
   private searchGroupAndLibertiesInDirection(
-    i: number,
-    j: number,
+    position: Position,
     targetColor: Color,
-    liberties: [number, number][],
-    acc: [number, number][],
+    liberties: Position[],
+    acc: Position[],
     direction: DirectionFn,
   ) {
-    const targetPosition = direction(i, j)
-    if (!isInBoard(...targetPosition, this.size)) {
+    const targetPosition = direction(position)
+    if (!targetPosition.isInBoard(this.size)) {
       return { liberties, stones: acc }
     }
     if (
-      acc.some(([i_acc, j_acc]) => i_acc === targetPosition[0] && j_acc === targetPosition[1]) ||
-      liberties.some(([i_acc, j_acc]) => i_acc === targetPosition[0] && j_acc === targetPosition[1])
+      acc.some((accPosition) => targetPosition.equal(accPosition)) ||
+      liberties.some((libertyPosition) => targetPosition.equal(libertyPosition))
     ) {
       return { liberties, stones: acc } // we already found a stone or a liberty in this position
     }
 
-    const targetStone = this.findStone(...targetPosition)
+    const targetStone = this.findStone(targetPosition)
     if (targetStone === undefined) {
       return { liberties: [...liberties, targetPosition], stones: acc }
     }
-    if (targetStone[2] === targetColor) {
+    if (targetStone[1] === targetColor) {
       const { liberties: newLiberties, stones } = this.computeGroupAndLiberties(
-        ...targetPosition,
+        targetPosition,
         targetColor,
         liberties,
         acc,
       )
       return {
         liberties: newLiberties,
-        stones: [...stones, [targetStone[0], targetStone[1]] as [number, number]],
+        stones: [...stones, targetStone[0]],
       }
     }
 

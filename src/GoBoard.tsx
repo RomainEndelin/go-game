@@ -1,6 +1,7 @@
 import { FC, useState } from "react"
 import { createRootStore } from "./models/createRootStore"
 import { observer } from "mobx-react"
+import { Position } from "./models/Position.model"
 
 interface GoBoardProps {
   size: number
@@ -19,18 +20,19 @@ export const GoBoard: FC<GoBoardProps> = observer(({ size }) => {
                 {[...Array(size).keys()]
                   .map((n) => n + 1)
                   .map((j) => {
-                    const stone = goGame.findStone(i, j)
+                    const position = new Position({ i, j })
+                    const stone = goGame.findStone(position)
                     return (
                       <td
                         key={`${i}-${j}`}
                         className="w-5 cursor-pointer text-center"
                         onClick={() => {
-                          if (goGame.addStone([i, j])) {
+                          if (goGame.addStone(position)) {
                             goGame.nextTurn()
                           }
                         }}
                       >
-                        {stone !== undefined ? (stone[2] === "black" ? "⚫" : "⚪") : "┼"}
+                        {stone !== undefined ? (stone[1] === "black" ? "⚫" : "⚪") : "┼"}
                       </td>
                     )
                   })}
