@@ -27,10 +27,29 @@ export class GoGame extends Model({
     return this.currentPlayer === this.whitePlayer ? this.blackPlayer : this.whitePlayer
   }
 
+  @computed
+  get boardIterator(): ("black" | "white" | undefined)[][] {
+    return Array.from(Array(this.size), (_, _i) => {
+      const i = _i + 1
+
+      return Array.from(Array(this.size), (_, _j) => {
+        const j = _j + 1
+
+        const position = new Position({ i, j })
+        // TODO: Smart iterator for stones, assuming they have been sorted
+        return this.blackPlayer.hasStone(position) ? "black" : this.whitePlayer.hasStone(position) ? "white" : undefined
+      })
+    })
+  }
+
   // Stones
   @modelAction
   addStone(targetPosition: Position) {
-    if (!targetPosition.isInBoard(this.size) || this.findStone(targetPosition) !== undefined) {
+    if (
+      !targetPosition.isInBoard(this.size) ||
+      this.blackPlayer.hasStone(targetPosition) ||
+      this.whitePlayer.hasStone(targetPosition)
+    ) {
       return false
     }
 
@@ -40,14 +59,10 @@ export class GoGame extends Model({
 
     if (afterActionDraft.data.currentPlayer.findStonesAndLibertiesFromPosition(targetPosition).liberties.length === 0) {
       return false // no suicide move
-      // If we are about to take a stone, that's not a suicide
+      // If we are about to take a stone, that's permitted (this is why we test on the afterActionDraft)
     }
 
     afterActionDraft.commit()
     return true
-  }
-
-  findStone(position: Position): Color | undefined {
-    return this.blackPlayer.hasStone(position) ? "black" : this.whitePlayer.hasStone(position) ? "white" : undefined
   }
 }

@@ -13,31 +13,29 @@ export const GoBoard: FC<GoBoardProps> = observer(({ size }) => {
     <div>
       <table className="bg-[#C19A6C]">
         <tbody>
-          {[...Array(size).keys()]
-            .map((n) => n + 1)
-            .map((i) => (
+          {goGame.boardIterator.map((row, _i) => {
+            const i = _i + 1
+            return (
               <tr key={i}>
-                {[...Array(size).keys()]
-                  .map((n) => n + 1)
-                  .map((j) => {
-                    const position = new Position({ i, j })
-                    const stoneColor = goGame.findStone(position)
-                    return (
-                      <td
-                        key={`${i}-${j}`}
-                        className="w-5 cursor-pointer text-center"
-                        onClick={() => {
-                          if (goGame.addStone(position)) {
-                            goGame.nextTurn()
-                          }
-                        }}
-                      >
-                        {stoneColor !== undefined ? (stoneColor === "black" ? "⚫" : "⚪") : "┼"}
-                      </td>
-                    )
-                  })}
+                {row.map((content, _j) => {
+                  const j = _j + 1
+                  return (
+                    <td
+                      key={`${i}-${j}`}
+                      className="w-5 cursor-pointer text-center"
+                      onClick={() => {
+                        if (goGame.addStone(new Position({ i, j }))) {
+                          goGame.nextTurn()
+                        }
+                      }}
+                    >
+                      {content !== undefined ? (content === "black" ? "⚫" : "⚪") : "┼"}
+                    </td>
+                  )
+                })}
               </tr>
-            ))}
+            )
+          })}
         </tbody>
       </table>
       {`Turn: ${goGame.turn} - ${goGame.currentPlayer.color === "black" ? "Black" : "White"} to play`}
