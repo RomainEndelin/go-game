@@ -21,7 +21,7 @@ export const GoBoard: FC<GoBoardProps> = observer(({ size }) => {
                   .map((n) => n + 1)
                   .map((j) => {
                     const position = new Position({ i, j })
-                    const stone = goGame.findStone(position)
+                    const stoneColor = goGame.findStone(position)
                     return (
                       <td
                         key={`${i}-${j}`}
@@ -32,7 +32,7 @@ export const GoBoard: FC<GoBoardProps> = observer(({ size }) => {
                           }
                         }}
                       >
-                        {stone !== undefined ? (stone[1] === "black" ? "⚫" : "⚪") : "┼"}
+                        {stoneColor !== undefined ? (stoneColor === "black" ? "⚫" : "⚪") : "┼"}
                       </td>
                     )
                   })}
@@ -40,7 +40,7 @@ export const GoBoard: FC<GoBoardProps> = observer(({ size }) => {
             ))}
         </tbody>
       </table>
-      {`Turn: ${goGame.turn} - ${goGame.currentColor === "black" ? "Black" : "White"} to play`}
+      {`Turn: ${goGame.turn} - ${goGame.currentPlayer.color === "black" ? "Black" : "White"} to play`}
     </div>
   )
 })
